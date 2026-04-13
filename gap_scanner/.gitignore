@@ -1,0 +1,12 @@
+# 登录状态（含账号 cookie，不提交）
+state/
+
+# 每日原始采集数据
+data/
+
+# 生成的报告（本地查看即可）
+reports/
+
+# Python 缓存
+__pycache__/
+*.pyc
