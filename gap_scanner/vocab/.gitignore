@@ -1,0 +1,4 @@
+# pending_review.txt 包含 AI 生成内容，建议保留在本地不提交
+# 如需团队共享词库，可删除下面这行
+pending_review.txt
+prune_suggestions.txt

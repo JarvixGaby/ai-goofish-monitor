@@ -2,7 +2,8 @@
 Xianyu 爬虫核心模块。
 
 使用 Playwright 拦截 MTOP API 响应，提取搜索结果。
-关键 API：mtop.idle.web.xyh.item.list（搜索商品列表）
+关键 API（搜索）：mtop.taobao.idlemtopsearch.pc.search（POST）
+参考 API（卖家主页）：mtop.idle.web.xyh.item.list（本模块不使用）
 
 数据来源参考：https://github.com/Usagi-org/ai-goofish-monitor
 """
@@ -10,18 +11,26 @@ Xianyu 爬虫核心模块。
 import asyncio
 import random
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
 from playwright.async_api import (
     BrowserContext,
     Page,
+    Response,
     TimeoutError as PlaywrightTimeoutError,
     async_playwright,
 )
 
+if TYPE_CHECKING:
+    from vocabulary import Vocabulary
+
 # 按优先级查找可用的 state 文件：
 #   1. 我们自己的 state/login_state.json（login.py 保存的）
 #   2. ai-goofish-monitor 的 state/acc_1.json（已有安装时可直接复用）
+# 搜索 API 端点标识（与原始项目 src/services/search_pagination.py 一致）
+SEARCH_API_FRAGMENT = "/h5/mtop.taobao.idlemtopsearch.pc.search/1.0/"
+
 _STATE_CANDIDATES = [
     Path("state/login_state.json"),
     Path("state/acc_1.json"),
@@ -36,29 +45,6 @@ def _find_state_file() -> Path | None:
             print(f"[fetcher] 使用登录状态：{p}")
             return p
     return None
-
-# 虚拟商品标题关键词：命中其一即认为是虚拟供给
-VIRTUAL_KWS = frozenset(
-    ["教程", "文档", "资料", "课程", "指导", "网盘", "模板", "方法论",
-     "指南", "攻略", "代操作", "代写", "代发", "服务", "合集", "电子书"]
-)
-
-# 需求帖关键词：命中其一即认为是求购类帖子
-DEMAND_KWS = frozenset(
-    ["求", "有没有", "哪里", "推荐", "收", "求购", "想要", "需要"]
-)
-
-
-async def _random_sleep(min_s: float = 2.0, max_s: float = 5.0) -> None:
-    await asyncio.sleep(random.uniform(min_s, max_s))
-
-
-def _is_virtual(title: str) -> bool:
-    return any(kw in title for kw in VIRTUAL_KWS)
-
-
-def _is_demand(title: str) -> bool:
-    return any(kw in title for kw in DEMAND_KWS)
 
 
 def _parse_price(price_parts) -> float:
@@ -83,11 +69,24 @@ def _parse_price(price_parts) -> float:
         return 0.0
 
 
-def _parse_items_from_response(json_data: dict) -> list[dict]:
+def _is_search_response(response: Response) -> bool:
+    """判断是否为搜索 API 响应（URL 含搜索片段且为 POST）。"""
+    url = response.url
+    method = response.request.method
+    return SEARCH_API_FRAGMENT in url and method == "POST"
+
+
+def _parse_items_from_response(
+    json_data: dict,
+    vocabulary: "Vocabulary | None" = None,
+) -> list[dict]:
     """
-    从 mtop.idle.web.xyh.item.list 的 JSON 响应中解析商品列表。
+    从搜索 API (idlemtopsearch.pc.search) 的 JSON 响应中解析商品列表。
 
     数据路径：json_data.data.resultList[].data.item.main.{exContent, clickParam.args}
+
+    若提供 vocabulary，则使用词库匹配对每条标题进行预分类；
+    否则 classification 字段设为 "unknown"，由 scanner 或 ai_classifier 后续处理。
     """
     items = []
     try:
@@ -112,18 +111,34 @@ def _parse_items_from_response(json_data: dict) -> list[dict]:
             pub_ts = str(args.get("publishTime", "0"))
             item_id = ex.get("itemId", "") or args.get("itemId", "")
 
+            # 使用 vocabulary 分类，或标记为待分类
+            if vocabulary is not None:
+                match_result = vocabulary.match(title)
+                classification = match_result.classification
+                matched_terms = match_result.matched_terms
+            else:
+                classification = "unknown"
+                matched_terms = []
+
             items.append({
                 "item_id": item_id,
                 "title": title,
                 "price": price,
                 "want_num": want_num,
                 "pub_ts": int(pub_ts) if pub_ts.isdigit() else 0,
-                "is_virtual": _is_virtual(title),
-                "is_demand": _is_demand(title),
+                "classification": classification,
+                "matched_terms": matched_terms,
+                # 兼容旧版字段（scanner.py fallback 用）
+                "is_virtual": classification == "virtual",
+                "is_demand": classification == "demand",
             })
     except Exception as e:
         print(f"  [parse error] {e}")
     return items
+
+
+async def _random_sleep(min_s: float = 2.0, max_s: float = 5.0) -> None:
+    await asyncio.sleep(random.uniform(min_s, max_s))
 
 
 class XianyuFetcher:
@@ -131,11 +146,12 @@ class XianyuFetcher:
     Playwright-based Xianyu fetcher。
 
     用法：
-        async with XianyuFetcher() as f:
+        async with XianyuFetcher(vocabulary=vocab) as f:
             items = await f.search("Cursor教程")
     """
 
-    def __init__(self) -> None:
+    def __init__(self, vocabulary: "Vocabulary | None" = None) -> None:
+        self._vocabulary = vocabulary
         self._playwright = None
         self._browser = None
         self._context: BrowserContext | None = None
@@ -214,33 +230,23 @@ class XianyuFetcher:
 
     async def search(self, keyword: str, pages: int = 2) -> list[dict]:
         """
-        搜索关键词，拦截 MTOP 商品列表 API，返回解析后的商品列表。
+        搜索关键词，拦截搜索 API 响应，返回解析后的商品列表。
 
-        pages：滚动翻页次数（每次约加载 20 条）。
+        pages：翻页次数（第 1 页 = 首次加载，之后点击「下一页」按钮）。
         """
         all_items: list[dict] = []
-
-        # 注册响应监听器，捕获 MTOP 商品列表 API
-        async def on_response(response):
-            if "mtop.idle.web.xyh.item.list" in response.url:
-                try:
-                    data = await response.json()
-                    parsed = _parse_items_from_response(data)
-                    all_items.extend(parsed)
-                    print(f"  [API] 已捕获 {len(all_items)} 条（{keyword}）")
-                except Exception as e:
-                    print(f"  [API parse error] {e}")
-
-        self._page.on("response", on_response)
 
         try:
             search_url = f"https://www.goofish.com/search?{urlencode({'q': keyword})}"
             print(f"  [search] {search_url}")
 
-            await self._page.goto(
-                search_url, wait_until="domcontentloaded", timeout=60000
-            )
-            await _random_sleep(2, 4)
+            # 先注册 expect_response 再 goto，避免竞态丢失首次响应
+            async with self._page.expect_response(
+                _is_search_response, timeout=30000
+            ) as first_resp_info:
+                await self._page.goto(
+                    search_url, wait_until="domcontentloaded", timeout=60000
+                )
 
             # 登录重定向检测
             if ("passport.goofish.com" in self._page.url
@@ -248,31 +254,65 @@ class XianyuFetcher:
                 print(f"  [ERROR] 登录已过期，请重新运行 python login.py")
                 return []
 
+            # 解析第 1 页
+            first_resp = await first_resp_info.value
+            try:
+                data = await first_resp.json()
+                parsed = _parse_items_from_response(data, self._vocabulary)
+                all_items.extend(parsed)
+                print(f"  [API] 第 1 页：{len(parsed)} 条（共 {len(all_items)}）")
+            except Exception as e:
+                print(f"  [API parse error] 第 1 页：{e}")
+
+            await _random_sleep(1, 3)
+
             # 风控弹窗检测
             try:
                 await self._page.wait_for_selector(
-                    "div.baxia-dialog-mask", timeout=2000
+                    "div.baxia-dialog-mask", state="visible", timeout=2000
                 )
-                print(f"  [RISK] 触发风控弹窗，跳过关键词「{keyword}」，稍后重试")
-                return []
+                print(f"  [RISK] 触发风控弹窗，跳过关键词「{keyword}」")
+                return all_items
             except PlaywrightTimeoutError:
-                pass  # 正常，继续
+                pass
 
-            # 滚动加载更多
-            for i in range(pages - 1):
-                await _random_sleep(3, 6)
-                await self._page.evaluate(
-                    "window.scrollTo(0, document.body.scrollHeight)"
-                )
-                await _random_sleep(2, 4)
-                print(f"  [scroll] 第 {i + 2} 页，已累计 {len(all_items)} 条")
+            # 翻页（点击「下一页」按钮，与原始项目一致）
+            NEXT_BTN = (
+                "button[class*='search-pagination-arrow-container']"
+                ":has([class*='search-pagination-arrow-right'])"
+                ":not([disabled])"
+            )
+            for page_num in range(2, pages + 1):
+                await _random_sleep(2, 5)
+                next_btn = self._page.locator(NEXT_BTN).first
+                if not await next_btn.count():
+                    print(f"  [page] 没有下一页按钮，停止翻页")
+                    break
+
+                try:
+                    await next_btn.scroll_into_view_if_needed()
+                    async with self._page.expect_response(
+                        _is_search_response, timeout=20000
+                    ) as resp_info:
+                        await next_btn.click(timeout=10000)
+
+                    resp = await resp_info.value
+                    data = await resp.json()
+                    parsed = _parse_items_from_response(data, self._vocabulary)
+                    all_items.extend(parsed)
+                    print(f"  [API] 第 {page_num} 页：{len(parsed)} 条（共 {len(all_items)}）")
+                    await _random_sleep(1, 3)
+                except PlaywrightTimeoutError:
+                    print(f"  [page] 第 {page_num} 页超时，停止翻页")
+                    break
+                except Exception as e:
+                    print(f"  [page] 第 {page_num} 页出错：{e}")
+                    break
 
         except PlaywrightTimeoutError:
-            print(f"  [timeout] 搜索「{keyword}」超时，使用已获取的 {len(all_items)} 条")
+            print(f"  [timeout] 搜索「{keyword}」首页超时，未捕获到数据")
         except Exception as e:
             print(f"  [error] 搜索「{keyword}」出错：{e}")
-        finally:
-            self._page.remove_listener("response", on_response)
 
         return all_items
 
@@ -283,10 +323,10 @@ class XianyuFetcher:
         注：此方法复用同一页面，与 search() 交替调用时需注意间隔。
         """
         demand_items = await self.search(f"{keyword} 求", pages=1)
-        count = sum(1 for item in demand_items if item["is_demand"])
-        # 补充：把含"有没有"等词的帖子也算入
-        count += sum(
+
+        # 使用词库分类结果统计需求帖
+        count = sum(
             1 for item in demand_items
-            if not item["is_demand"] and any(kw in item["title"] for kw in ["有没有", "哪里有"])
+            if item.get("classification") == "demand" or item.get("is_demand", False)
         )
         return count

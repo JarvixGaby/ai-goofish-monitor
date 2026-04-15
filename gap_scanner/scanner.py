@@ -1,26 +1,22 @@
 """
-缺口计算模块。
+缺口计算模块（纯逻辑，无 AI 依赖）。
 
 核心公式：
     缺口分 = 需求帖数 / max(虚拟供给数, 1)
 
 缺口分越高 → 需求旺盛但供给稀少 → 值得今天创作并上架。
+
+依赖：vocabulary.Vocabulary（注入，不在此处实例化）
 """
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from vocabulary import Vocabulary
 
 DATA_DIR = Path("data")
-
-# 认定为「虚拟供给」的标题关键词（与 fetcher.py 同步，可按需扩充）
-VIRTUAL_SUPPLY_KWS = frozenset(
-    ["教程", "文档", "资料", "课程", "指导", "网盘", "模板", "方法论",
-     "指南", "攻略", "代操作", "代写", "代发", "服务", "合集", "电子书"]
-)
-
-
-def _is_virtual_supply(title: str) -> bool:
-    return any(kw in title for kw in VIRTUAL_SUPPLY_KWS)
 
 
 def save_raw(keyword: str, items: list[dict], date_str: str) -> None:
@@ -53,15 +49,55 @@ def load_raw(date_str: str) -> dict[str, list[dict]]:
     return result
 
 
-def calculate_gap(keyword: str, supply_items: list[dict], demand_count: int) -> dict:
+def calculate_gap(
+    keyword: str,
+    supply_items: list[dict],
+    demand_count: int,
+    vocabulary: "Vocabulary | None" = None,
+) -> dict:
     """
     计算单个关键词的缺口指标。
 
+    参数：
+        keyword:      搜索关键词
+        supply_items: 从闲鱼搜索到的商品列表
+                      每条 item 至少含 title、price、want_num 字段。
+                      若 item 已有 "classification" 字段（由 ai_classifier 设置），
+                      则直接使用；否则通过 vocabulary 或 item["is_virtual"] 判断。
+        demand_count: 需求帖数量
+        vocabulary:   Vocabulary 实例（可选）；若提供则用于分类；
+                      若为 None，则回退到 item["is_virtual"] 字段（fetcher 已标注）
+
     返回包含以下字段的字典：
-    - keyword, gap_score, demand_posts, virtual_supply, total_listings
-    - avg_price, avg_want, suggested_price, top_titles
+        keyword, gap_score, demand_posts, virtual_supply, total_listings,
+        avg_price, avg_want, suggested_price, top_titles, top_items
     """
-    virtual = [i for i in supply_items if _is_virtual_supply(i.get("title", ""))]
+    virtual: list[dict] = []
+
+    for item in supply_items:
+        # 优先使用已有分类结果（来自 AI 分类器或 fetcher）
+        classification = item.get("classification", "")
+
+        if classification == "virtual":
+            virtual.append(item)
+        elif classification in ("demand", "blacklisted", "physical"):
+            continue
+        elif vocabulary is not None:
+            # 使用词库匹配
+            result = vocabulary.match(item.get("title", ""))
+            if result.classification == "virtual":
+                item["classification"] = "virtual"
+                virtual.append(item)
+            else:
+                item["classification"] = result.classification or "unknown"
+        else:
+            # 最终回退：使用 fetcher 标注的 is_virtual 字段
+            if item.get("is_virtual", False):
+                item["classification"] = "virtual"
+                virtual.append(item)
+            else:
+                item["classification"] = "unknown"
+
     virtual_count = len(virtual)
     total = len(supply_items)
 
@@ -84,8 +120,9 @@ def calculate_gap(keyword: str, supply_items: list[dict], demand_count: int) -> 
     else:
         suggested_price = "¥9-19"
 
-    # 代表性竞品标题（前 3 条虚拟商品）
-    top_titles = [i["title"] for i in virtual[:3]]
+    # 代表性竞品（前 5 条虚拟商品，供 AI Advisor 使用）
+    top_items = virtual[:5]
+    top_titles = [i["title"] for i in top_items]
 
     return {
         "keyword": keyword,
@@ -97,4 +134,5 @@ def calculate_gap(keyword: str, supply_items: list[dict], demand_count: int) -> 
         "avg_want": avg_want,
         "suggested_price": suggested_price,
         "top_titles": top_titles,
+        "top_items": top_items,     # 新增：供 Phase 2 AI Advisor 使用
     }
