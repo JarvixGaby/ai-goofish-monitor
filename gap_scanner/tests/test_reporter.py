@@ -23,6 +23,19 @@ def make_gap(keyword, gap_score=5.0, demand=10, supply=2, total=20, avg_price=30
         "suggested_price": suggested,
         "top_titles": titles or [f"{keyword}教程 秒发", f"{keyword}资料 百度云"],
         "top_items": [],
+        "price_median": avg_price,
+        "price_p25": avg_price * 0.9,
+        "price_p75": avg_price * 1.1,
+        "price_distribution": "¥0-10: 0个, ¥10-50: 2个, ¥50+: 0个",
+        "newest_pub_date": "2026-04-10",
+        "oldest_pub_date": "2026-03-01",
+        "recent_7d_count": 3,
+        "recent_30d_count": 15,
+        "classification_dist": {"virtual": supply, "unknown": max(0, total - supply)},
+        "top_want_items": [
+            {"title": f"{keyword} 热门", "price": 19.0, "want_num": 12},
+        ],
+        "want_positive_count": 5,
     }
 
 
@@ -59,6 +72,10 @@ def test_generate_basic_structure():
     assert "2026-04-15" in report
     assert "Cursor教程" in report
     assert "Python教程" in report
+    assert "## 数据质量" in report
+    assert "总扫描商品数" in report
+    assert "中位价" in report
+    assert "近7天新品" in report
 
 
 def test_generate_sorts_by_gap_score():

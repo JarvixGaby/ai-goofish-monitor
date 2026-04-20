@@ -32,6 +32,13 @@ from reporter import generate, save
 from vocabulary import Vocabulary
 from config import get_settings
 from ai_client import build_client_optional, AIClient
+from keyword_analyzer import (
+    KeywordEvaluation,
+    evaluate_keyword_relevance,
+    suggest_subdivisions,
+    load_keyword_status,
+    save_keyword_status,
+)
 
 KEYWORDS_FILE = Path("keywords.txt")
 VOCAB_DIR = Path("vocab")
@@ -54,7 +61,9 @@ def load_keywords(limit: int | None = None) -> list[str]:
 
 
 def _print_top5(gaps: list[dict]) -> None:
-    sorted_gaps = sorted(gaps, key=lambda x: x["gap_score"], reverse=True)
+    # 无效关键词已在扫描中清零，但排名展示时额外过滤，避免 0 分无效词混在末尾
+    valid_gaps = [g for g in gaps if g.get("keyword_status") != "invalid"]
+    sorted_gaps = sorted(valid_gaps, key=lambda x: x["gap_score"], reverse=True)
     print("\n===== Top 5 缺口 =====")
     for i, g in enumerate(sorted_gaps[:5], 1):
         print(
@@ -176,16 +185,19 @@ async def run_scan(
     today: str,
     vocabulary: Vocabulary,
     ai_client: AIClient | None,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], dict[str, KeywordEvaluation]]:
     """
     执行完整扫描。
 
-    返回：(gaps, all_items_flat)
-        gaps:           各关键词的缺口分析结果
-        all_items_flat: 本次所有爬取的商品（供词库学习使用）
+    返回：(gaps, all_items_flat, keyword_evaluations)
+        gaps:                 各关键词的缺口分析结果（含 keyword_status 等）
+        all_items_flat:       本次所有爬取的商品（供词库学习使用）
+        keyword_evaluations:  关键词 → AI 评估结果（无 AI 时为 {}）
     """
     gaps: list[dict] = []
     all_items_flat: list[dict] = []
+    keyword_evaluations: dict[str, KeywordEvaluation] = {}
+    keyword_status_store = load_keyword_status(VOCAB_DIR)
 
     async with XianyuFetcher(vocabulary=vocabulary) as fetcher:
         total = len(keywords)
@@ -211,6 +223,48 @@ async def run_scan(
 
             # 计算缺口
             gap = calculate_gap(kw, supply, demand, vocabulary)
+
+            if ai_client:
+                eval_result = await evaluate_keyword_relevance(kw, supply, ai_client)
+                keyword_evaluations[kw] = eval_result
+                gap["keyword_status"] = eval_result.status
+                gap["relevance_score"] = eval_result.relevance_score
+                gap["evaluation_reason"] = eval_result.reason
+                gap["suggested_alternatives"] = eval_result.suggested_alternatives
+
+                keyword_status_store[kw] = {
+                    "status": eval_result.status,
+                    "relevance_score": eval_result.relevance_score,
+                    "reason": eval_result.reason,
+                    "alternatives": eval_result.suggested_alternatives,
+                    "last_evaluated": today,
+                }
+                save_keyword_status(VOCAB_DIR, keyword_status_store)
+
+                if eval_result.status == "invalid":
+                    # 无效关键词的供需数据不可信，强制清零缺口分，避免误导排行
+                    gap["gap_score"] = 0.0
+                    print(
+                        f"  [WARN] 关键词「{kw}」被判定为无效搜索词，缺口分已清零（搜索结果与虚拟商品意图不符）。"
+                    )
+
+                if len(supply) >= 55:
+                    subs = await suggest_subdivisions(kw, supply, ai_client)
+                    gap["subdivision_suggestions"] = subs
+                    if subs:
+                        print(
+                            "  [细分建议] 搜索量较大，可考虑更精准的子关键词："
+                            + "；".join(subs)
+                        )
+                    else:
+                        print(
+                            "  [细分建议] 搜索量较大，但未生成子关键词建议（可稍后重试）。"
+                        )
+                else:
+                    gap["subdivision_suggestions"] = []
+            else:
+                gap["subdivision_suggestions"] = []
+
             gaps.append(gap)
             all_items_flat.extend(supply)
 
@@ -226,7 +280,7 @@ async def run_scan(
                 print(f"  等待 {wait:.0f}s 后继续...")
                 await asyncio.sleep(wait)
 
-    return gaps, all_items_flat
+    return gaps, all_items_flat, keyword_evaluations
 
 
 # ──────────────────────────────────────────────────────────
@@ -281,18 +335,27 @@ async def main(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     # 执行扫描
-    gaps, all_items_flat = await run_scan(keywords, today, vocabulary, ai_client)
+    gaps, all_items_flat, keyword_evaluations = await run_scan(
+        keywords, today, vocabulary, ai_client
+    )
 
     # 生成 Phase 2 AI 建议（Phase 2 在下面的 reporter 升级后启用）
     advice_map: dict[str, dict] = {}
     if ai_client and not args.no_ai:
         from ai_advisor import generate_advice_for_top
-        sorted_gaps = sorted(gaps, key=lambda x: x["gap_score"], reverse=True)
+        # 排除无效关键词，只对有效/含噪音的关键词生成建议
+        valid_gaps = [g for g in gaps if g.get("keyword_status") != "invalid"]
+        sorted_gaps = sorted(valid_gaps, key=lambda x: x["gap_score"], reverse=True)
         print("\n[AI Advisor] 正在生成 Top 5 选品建议...")
         advice_map = await generate_advice_for_top(sorted_gaps[:5], ai_client)
 
     # 生成并保存报告
-    report_content = generate(gaps, today, advice_map=advice_map)
+    report_content = generate(
+        gaps,
+        today,
+        advice_map=advice_map,
+        keyword_evaluations=keyword_evaluations,
+    )
     report_path = save(report_content, today)
 
     # 词库学习（--no-learn 时跳过）

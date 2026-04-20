@@ -18,11 +18,15 @@ def make_settings(auto_threshold=0.85, review_threshold=0.60, vocab_dir=None) ->
         ai_base_url="https://test.api.example.com",
         ai_api_key="sk-test",
         ai_model="test-model",
+        ai_analysis_model="test-analysis-model",
         vocab_auto_threshold=auto_threshold,
         vocab_review_threshold=review_threshold,
         vocab_dir=vocab_dir or Path("/tmp/vocab"),
         ai_timeout=5,
         ai_max_retries=0,
+        detail_limit=20,
+        detail_interval_min=10.0,
+        detail_interval_max=20.0,
     )
 
 
@@ -99,7 +103,7 @@ class TestProcessAiResponse:
         """已在词库中的词不重复添加。"""
         vdir = tmp_path / "vocab"
         vdir.mkdir()
-        (vdir / "virtual_supply.txt").write_text("教程\n", encoding="utf-8")
+        (vdir / "virtual_weak.txt").write_text("教程\n", encoding="utf-8")
         vocab = Vocabulary(vdir)
         settings = make_settings()
         result = LearnResult()

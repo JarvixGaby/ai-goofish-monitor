@@ -23,11 +23,15 @@ def make_settings(**overrides) -> Settings:
         ai_base_url="https://test.api.example.com",
         ai_api_key="sk-test-key",
         ai_model="test-model",
+        ai_analysis_model="test-analysis-model",
         vocab_auto_threshold=0.85,
         vocab_review_threshold=0.60,
         vocab_dir=Path("/tmp/vocab"),
         ai_timeout=5,
         ai_max_retries=1,
+        detail_limit=20,
+        detail_interval_min=10.0,
+        detail_interval_max=20.0,
     )
     defaults.update(overrides)
     return Settings(**defaults)

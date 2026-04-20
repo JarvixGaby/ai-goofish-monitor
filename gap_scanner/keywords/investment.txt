@@ -1,0 +1,8 @@
+# 投资理财赛道 MVP — 只扫这几个词，深度优先
+# 用法: python collect.py --config investment
+
+炒股教程
+期货教程
+量化交易入门
+技术分析资料
+CFA备考资料

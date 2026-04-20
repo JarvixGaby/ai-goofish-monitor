@@ -5,31 +5,47 @@
 所有文件读写均为文本格式，人类可读可编辑。
 
 词库分类：
-    virtual_supply  — 虚拟商品/服务供给信号词
+    virtual_strong  — 强信号：单独命中即可判为虚拟供给
+    virtual_weak    — 弱信号：需多个命中或与 delivery 组合
     demand_signal   — 求购/需求帖信号词
     delivery_method — 交付方式辅助词
     blacklist       — 误判排除词
 
-匹配优先级：blacklist > virtual_supply > demand_signal > delivery_method > unknown
+匹配优先级：blacklist > demand_signal > 强/弱虚拟规则 > delivery_method > unknown
+
+兼容：`virtual_supply` 作为读写别名，加载时为 strong∪weak；写入默认落到 virtual_weak。
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Literal
 
-# 词库文件名映射
+# 词库文件名映射（真实文件）
 CATEGORY_FILES: dict[str, str] = {
-    "virtual_supply": "virtual_supply.txt",
+    "virtual_strong": "virtual_strong.txt",
+    "virtual_weak": "virtual_weak.txt",
     "demand_signal": "demand_signal.txt",
     "delivery_method": "delivery_method.txt",
     "blacklist": "blacklist.txt",
 }
 
-ClassificationType = Literal["virtual", "demand", "delivery", "blacklisted", "unknown"]
+# add_terms / remove_terms 中旧分类名 → 实际写入的文件（保守：默认弱信号文件）
+_WRITE_CATEGORY_ALIASES: dict[str, str] = {
+    "virtual_supply": "virtual_weak",
+}
+
+ClassificationType = Literal[
+    "virtual",
+    "weak_virtual",
+    "demand",
+    "delivery",
+    "blacklisted",
+    "unknown",
+]
 
 
 @dataclass
@@ -47,7 +63,7 @@ class TermEntry:
     confidence: float
     source: Literal["manual", "ai"] = "ai"
     reason: str = ""
-    category: str = "virtual_supply"   # 默认写入 virtual_supply
+    category: str = "virtual_supply"   # 默认写入 virtual_weak（经别名解析）
 
 
 class Vocabulary:
@@ -63,7 +79,7 @@ class Vocabulary:
     def __init__(self, vocab_dir: Path) -> None:
         self.vocab_dir = vocab_dir
         vocab_dir.mkdir(parents=True, exist_ok=True)
-        # 缓存：{category: set[str]}，首次 match 时懒加载
+        # 缓存：{category: set[str]}，首次 load 时懒加载
         self._cache: dict[str, set[str]] = {}
 
     # ------------------------------------------------------------------
@@ -74,7 +90,12 @@ class Vocabulary:
         """
         加载指定词库，返回词条集合（已去除注释和空行）。
         结果会被缓存直到调用 invalidate_cache()。
+
+        特殊：category == 'virtual_supply' 时返回 virtual_strong ∪ virtual_weak（兼容旧代码）。
         """
+        if category == "virtual_supply":
+            return self.load("virtual_strong") | self.load("virtual_weak")
+
         if category in self._cache:
             return self._cache[category]
 
@@ -105,36 +126,57 @@ class Vocabulary:
         """
         对一条商品标题做多词库匹配。
 
-        返回优先级最高的分类结果：
-            blacklisted > virtual > demand > delivery > unknown
+        优先级：
+            blacklisted > demand > 强虚拟 / 弱虚拟规则 > delivery > unknown
         """
         if not title:
             return MatchResult("unknown", [], 0.0)
 
-        # 1. 黑名单优先：命中则直接排除
         bl_hits = self._find_hits(title, "blacklist")
         if bl_hits:
             return MatchResult("blacklisted", bl_hits, 1.0)
 
-        # 2. 虚拟供给
-        vs_hits = self._find_hits(title, "virtual_supply")
-        if vs_hits:
-            return MatchResult("virtual", vs_hits, 1.0)
-
-        # 3. 需求信号
         ds_hits = self._find_hits(title, "demand_signal")
         if ds_hits:
             return MatchResult("demand", ds_hits, 1.0)
 
-        # 4. 交付方式（辅助，置信度较低）
+        strong_hits = self._find_hits(title, "virtual_strong")
+        weak_hits = self._find_hits(title, "virtual_weak")
         dm_hits = self._find_hits(title, "delivery_method")
+
+        if strong_hits:
+            merged = self._merge_hit_lists(strong_hits, weak_hits, dm_hits)
+            return MatchResult("virtual", merged, 1.0)
+
+        wc = len(weak_hits)
+        dc = len(dm_hits)
+
+        if wc >= 2:
+            return MatchResult("virtual", list(weak_hits), 0.8)
+        if wc == 1 and dc >= 1:
+            merged = self._merge_hit_lists(weak_hits, dm_hits)
+            return MatchResult("virtual", merged, 0.7)
+        if wc == 1:
+            return MatchResult("weak_virtual", list(weak_hits), 0.4)
+
         if dm_hits:
             return MatchResult("delivery", dm_hits, 0.7)
 
         return MatchResult("unknown", [], 0.0)
 
+    @staticmethod
+    def _merge_hit_lists(*lists: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for lst in lists:
+            for t in lst:
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
+        return out
+
     def _find_hits(self, title: str, category: str) -> list[str]:
-        """返回标题中命中该词库的词条列表。"""
+        """返回标题中命中该词库的词条列表（按词库文件内字符串匹配）。"""
         terms = self.load(category)
         return [t for t in terms if t in title]
 
@@ -142,13 +184,17 @@ class Vocabulary:
     # 增删
     # ------------------------------------------------------------------
 
+    def _resolve_write_category(self, category: str) -> str:
+        return _WRITE_CATEGORY_ALIASES.get(category, category)
+
     def add_terms(self, category: str, entries: list[TermEntry]) -> int:
         """
         将新词条追加写入词库文件，跳过已存在的词。
         返回实际新增数量。
         """
-        path = self._path(category)
-        existing = self.load(category)
+        write_cat = self._resolve_write_category(category)
+        path = self._path(write_cat)
+        existing = self.load(write_cat)
 
         new_entries = [e for e in entries if e.term not in existing]
         if not new_entries:
@@ -177,7 +223,8 @@ class Vocabulary:
             f.write("\n".join(lines) + "\n")
 
         # 使缓存失效
-        self._cache.pop(category, None)
+        self._cache.pop(write_cat, None)
+        self._cache.pop("virtual_supply", None)
         return len(new_entries)
 
     def remove_terms(self, category: str, terms: list[str]) -> int:
@@ -185,23 +232,37 @@ class Vocabulary:
         从词库文件中删除指定词条（保留注释行和其他词）。
         返回实际删除数量。
         """
+        write_cat = self._resolve_write_category(category)
+        targets = frozenset(terms)
+        removed = 0
+
+        if category == "virtual_supply":
+            # 旧别名：两个文件都尝试删除
+            removed += self._remove_terms_from_file("virtual_strong", targets)
+            removed += self._remove_terms_from_file("virtual_weak", targets)
+            self._cache.pop("virtual_strong", None)
+            self._cache.pop("virtual_weak", None)
+            self._cache.pop("virtual_supply", None)
+            return removed
+
+        removed = self._remove_terms_from_file(write_cat, targets)
+        self._cache.pop(write_cat, None)
+        self._cache.pop("virtual_supply", None)
+        return removed
+
+    def _remove_terms_from_file(self, category: str, to_remove: frozenset[str]) -> int:
         path = self._path(category)
         if not path.exists():
             return 0
-
-        to_remove = set(terms)
         removed = 0
         new_lines: list[str] = []
-
         for raw_line in path.read_text(encoding="utf-8").splitlines():
             term = re.sub(r"\s*#.*$", "", raw_line).strip()
             if term and term in to_remove:
                 removed += 1
-                continue  # 跳过该词
+                continue
             new_lines.append(raw_line)
-
         path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-        self._cache.pop(category, None)
         return removed
 
     def add_to_pending(self, entries: list[TermEntry]) -> None:

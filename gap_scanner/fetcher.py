@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 #   2. ai-goofish-monitor 的 state/acc_1.json（已有安装时可直接复用）
 # 搜索 API 端点标识（与原始项目 src/services/search_pagination.py 一致）
 SEARCH_API_FRAGMENT = "/h5/mtop.taobao.idlemtopsearch.pc.search/1.0/"
+DETAIL_API_FRAGMENT = "h5api.m.goofish.com/h5/mtop.taobao.idle.pc.detail"
 
 _STATE_CANDIDATES = [
     Path("state/login_state.json"),
@@ -45,6 +46,21 @@ def _find_state_file() -> Path | None:
             print(f"[fetcher] 使用登录状态：{p}")
             return p
     return None
+
+
+def _parse_fish_tags(ex: dict, args: dict) -> list[str]:
+    """解析 fishTags（包邮、验货宝等），与主项目 src/parsers.py 一致。"""
+    tags: list[str] = []
+    if args.get("tag") == "freeship":
+        tags.append("包邮")
+    r1 = (ex.get("fishTags") or {}).get("r1") or {}
+    for tag_item in r1.get("tagList") or []:
+        if not isinstance(tag_item, dict):
+            continue
+        content = (tag_item.get("data") or {}).get("content", "")
+        if content and content not in tags:
+            tags.append(content)
+    return tags
 
 
 def _parse_price(price_parts) -> float:
@@ -99,17 +115,32 @@ def _parse_items_from_response(
             ex = main.get("exContent", {})
             args = main.get("clickParam", {}).get("args", {})
 
+            if not items and args:
+                print(f"  [debug] clickParam.args keys: {list(args.keys())}")
+
             title = ex.get("title", "")
             price = _parse_price(ex.get("price", []))
 
-            raw_want = args.get("wantNum", "0")
+            raw_want = args.get("wantNum")
+            if raw_want is None or raw_want == "":
+                raw_want = args.get("want_num", "0")
             try:
-                want_num = int(raw_want)
+                want_num = int(str(raw_want).strip())
             except (ValueError, TypeError):
                 want_num = 0
 
             pub_ts = str(args.get("publishTime", "0"))
             item_id = ex.get("itemId", "") or args.get("itemId", "")
+
+            area = ex.get("area", "") or ""
+            pic_url = ex.get("picUrl", "") or ""
+            raw_link = main.get("targetUrl", "") or ""
+            item_url = raw_link.replace("fleamarket://", "https://www.goofish.com/")
+            seller_name = ex.get("userNickName", "") or ""
+            ori_price = ex.get("oriPrice", "")
+            if ori_price is None:
+                ori_price = ""
+            fish_tags = _parse_fish_tags(ex, args)
 
             # 使用 vocabulary 分类，或标记为待分类
             if vocabulary is not None:
@@ -128,6 +159,12 @@ def _parse_items_from_response(
                 "pub_ts": int(pub_ts) if pub_ts.isdigit() else 0,
                 "classification": classification,
                 "matched_terms": matched_terms,
+                "area": area,
+                "pic_url": pic_url,
+                "item_url": item_url,
+                "seller_name": seller_name,
+                "ori_price": ori_price,
+                "fish_tags": fish_tags,
                 # 兼容旧版字段（scanner.py fallback 用）
                 "is_virtual": classification == "virtual",
                 "is_demand": classification == "demand",
@@ -315,6 +352,93 @@ class XianyuFetcher:
             print(f"  [error] 搜索「{keyword}」出错：{e}")
 
         return all_items
+
+    async def fetch_detail(self, item_url: str) -> dict | None:
+        """
+        访问商品详情页，拦截详情 API 响应，提取 itemDO + sellerDO。
+
+        反风控改造（2026-04-20）：
+        - 复用搜索同一个 page（不再频繁 new_page/close，避免"开关页签"机器人信号）
+        - 加入"人类行为"：页面加载后随机滚动 + 停留
+        - 访问完不立即跳走，保持在页面 3-8s（模拟阅读）
+
+        返回增强字段 dict，失败返回 None；
+        触发风控时返回 {"_risk_control": True}。
+        """
+        if not item_url:
+            return None
+
+        # 关键改动：复用搜索时用的 self._page，不再开新页签
+        # 新页签 + 立刻 goto + 立刻 close 是机器人的典型行为
+        page = self._page
+
+        try:
+            async with page.expect_response(
+                lambda r: DETAIL_API_FRAGMENT in r.url, timeout=25000
+            ) as detail_info:
+                await page.goto(
+                    item_url, wait_until="domcontentloaded", timeout=25000
+                )
+
+            resp = await detail_info.value
+            if not resp.ok:
+                print(f"    [detail] HTTP {resp.status}，跳过")
+                return None
+
+            json_data = await resp.json()
+
+            ret_val = json_data.get("ret", [])
+            if "FAIL_SYS_USER_VALIDATE" in str(ret_val):
+                print("    [detail] 触发风控验证 (FAIL_SYS_USER_VALIDATE)")
+                # 关键：保留页面给用户手动过验证
+                # 上层决定是 stop 还是等用户干预
+                return {"_risk_control": True}
+
+            item_do = json_data.get("data", {}).get("itemDO", {})
+            seller_do = json_data.get("data", {}).get("sellerDO", {})
+
+            image_infos = item_do.get("imageInfos", []) or []
+            image_urls = [
+                img.get("url") for img in image_infos
+                if isinstance(img, dict) and img.get("url")
+            ]
+
+            desc_text = item_do.get("desc", "") or ""
+
+            zhima_info = seller_do.get("zhimaLevelInfo", {}) or {}
+            zhima_level = zhima_info.get("levelName", "") or ""
+
+            # 人类行为模拟：随机滚动 + 停留
+            # 真人进详情页会滑到图片区、描述区再返回
+            try:
+                await page.mouse.wheel(0, random.randint(200, 600))
+                await asyncio.sleep(random.uniform(1.0, 2.5))
+                await page.mouse.wheel(0, random.randint(300, 800))
+                await asyncio.sleep(random.uniform(1.5, 4.0))
+                # 偶尔往回滑一下（更真实）
+                if random.random() < 0.4:
+                    await page.mouse.wheel(0, -random.randint(100, 400))
+                    await asyncio.sleep(random.uniform(0.5, 1.5))
+            except Exception:
+                pass
+
+            return {
+                "want_count": int(item_do.get("wantCnt", 0) or 0),
+                "browse_count": int(item_do.get("browseCnt", 0) or 0),
+                "description": desc_text[:2000],
+                "image_urls": image_urls,
+                "seller_reg_days": int(seller_do.get("userRegDay", 0) or 0),
+                "zhima_level": zhima_level,
+                "item_status": item_do.get("status", ""),
+                "category_name": item_do.get("categoryName", ""),
+            }
+
+        except PlaywrightTimeoutError:
+            print(f"    [detail] 详情页超时")
+            return None
+        except Exception as e:
+            print(f"    [detail] 详情页出错：{e}")
+            return None
 
     async def count_demand(self, keyword: str) -> int:
         """

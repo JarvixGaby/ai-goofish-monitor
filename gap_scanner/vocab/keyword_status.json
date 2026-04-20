@@ -1,0 +1,355 @@
+{
+  "Cursor教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为Cursor编程工具的教程、实战课程等虚拟商品，高度符合搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Claude教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "几乎所有标题都明确指向Claude Code/Claude Skills等虚拟教程资料，均为电子文档、视频课程、PDF等数字交付形式，高度符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "AI工作流": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题明确提供AI工作流相关的教程、课程、工具包等虚拟商品，如训练营、工作流合集、实战课程等，符合虚拟商品意图，少数标题偏向具体应用场景但仍属相关",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Midjourney教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为Midjourney AI绘画相关的视频教程、课程资料，完全符合虚拟商品意图，涵盖入门到精通、室内设计应用、服装设计等垂直领域，均为网盘秒发货的数字内容",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Suno教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为Suno AI音乐创作相关的视频教程、课程资料等虚拟商品，高度符合搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Stable Diffusion教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均明确指向Stable Diffusion相关的教程、课程、安装包等虚拟商品，高度符合用户搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "ComfyUI教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为ComfyUI相关的视频教程、系统课程和配套资料，高度符合虚拟商品教程意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Kimi教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "绝大多数标题都是Kimi AI工具的使用教程、提示词指令集、解除限制方法等虚拟数字内容，高度符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "炒股教程": {
+    "status": "valid",
+    "relevance_score": 0.65,
+    "reason": "前2条明确为虚拟资料（笔记/音频/PDF），第4条为代做服务，但3、5-10条多为实体书销售，虚拟商品占比约40%",
+    "alternatives": [
+      "炒股资料包",
+      "炒股视频教程",
+      "股票学习资料"
+    ],
+    "last_evaluated": "2026-04-20"
+  },
+  "技术分析资料": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题明确为技术类PDF资料、教程、培训文档等虚拟商品，符合搜索意图，仅个别混入实物设计图纸",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "量化交易入门": {
+    "status": "valid",
+    "relevance_score": 0.75,
+    "reason": "多数标题符合量化交易教程/资料意图（如1、2、4、8提供电子教程、课程、代码实战），但混杂部分实体书（如4、5、7、9标注'全新''包邮''现货'疑似纸质书）和泛股票技术分析内容（如3、6、10偏传统炒股而非量化），整体相关但有噪音",
+    "alternatives": [
+      "量化交易Python教程",
+      "量化策略回测资料",
+      "量化交易视频课程"
+    ],
+    "last_evaluated": "2026-04-20"
+  },
+  "期货教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为期货相关的视频教程、课程、电子资料等虚拟商品，高度符合搜索意图，无实体书或无关品类",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "可转债教程": {
+    "status": "invalid",
+    "relevance_score": 0.0,
+    "reason": "所有标题均为实体书籍（世界名著、儿童读物、文学小说等），无一与可转债教程、投资理财类虚拟商品相关",
+    "alternatives": [
+      "可转债投资教程 电子版",
+      "可转债实战课程 网盘",
+      "可转债套利资料"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "小红书运营教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题中9条直接相关小红书运营/电商/变现教程课程，1条为代写服务但也属虚拟服务范畴，整体高度符合虚拟商品教程意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "公众号运营教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题中9条直接相关公众号运营教程/课程/资料，均为可交付的虚拟商品，高度符合搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "短视频运营教程": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题直接匹配短视频运营教程意图，提供自媒体、抖音运营、剪辑等虚拟课程资料，仅3、4、6、7条为服务代做或线下课程转让，整体相关度高",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "副业赚钱教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题中9条明确为副业赚钱相关的虚拟教程资料（酒店代订、写作变现、摆摊、AI编程、网创课程、公众号运营、婚恋创业、IP训练营、跨境电商），均为可在线交付的数字内容，与搜索意图高度吻合",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "独立站教程": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题明确提供独立站建站、SEO、运营等虚拟教程/课程/咨询服务，符合虚拟商品意图，仅2、3条为无关商品",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Python教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题中9条明确提供Python视频教程、课程、培训等虚拟商品，符合教程资料类意图，仅第10条混入少儿编程内容但仍属虚拟教程范畴",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "Excel教程": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为Excel视频教程、课程资料等虚拟商品，高度符合用户搜索意图，包含网盘发货、自动发货等典型虚拟商品特征",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "PPT模板": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为可编辑的PPT模板虚拟商品，涵盖工作汇报、商务、竞赛等多场景，通过网盘自动发货，完全符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "雅思备考资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为雅思备考相关的虚拟商品，包含网课、电子资料、真题、题库等可在线交付的数字内容，与搜索意图高度匹配",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "考研资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题中9条明确为考研相关的电子资料、网课、笔记等虚拟商品，涵盖英语、专业课、理论等多个科目，均为可网盘交付的数字内容，高度符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "CFA备考资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为CFA考试电子资料、网盘课程、题库等虚拟商品，高度符合备考资料的搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "教程": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题符合虚拟商品教程意图，包含视频教程、攻略、课程等数字内容，仅第4条湿辣牛肉配方偏实体配方类，整体相关度高",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "资料": {
+    "status": "valid",
+    "relevance_score": 0.7,
+    "reason": "多数标题符合虚拟商品特征（PDF资料、网课、电子文档、网盘发货），但存在部分低质或擦边内容（如1、2、6号标题），整体相关但质量参差",
+    "alternatives": [
+      "考研资料",
+      "中考资料电子版",
+      "网课教程"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "模板": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为虚拟商品，涵盖简历模板、PPT模板、设计素材、剪映模板、Excel模板等数字内容，明确标注网盘发货/秒发/电子版，高度符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "课程": {
+    "status": "noisy",
+    "relevance_score": 0.3,
+    "reason": "搜索词过于宽泛，结果混杂大量线下实体课程（奥博珠心算、普拉提、童画森林等）和平台账号转让，仅第1、2、9、10条为可交付的虚拟教程资料",
+    "alternatives": [
+      "在线课程",
+      "视频教程",
+      "网课资源"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "笔记": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题全部为虚拟商品（电子资料、PDF笔记、网盘课程等），高度符合教程资料类数字内容意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "电子版": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "10条标题全部为虚拟商品，涵盖电子书、教辅资料、视频课程、动画资源等数字内容，均通过网盘交付，完全符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "代做": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题符合虚拟商品/代做服务意图，如PPT代做、建模代做、Excel代做、广联达代做等数字化服务，少数混杂代办跑腿类服务",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "咨询": {
+    "status": "invalid",
+    "relevance_score": 0.1,
+    "reason": "搜索词过于宽泛，结果几乎全是真人咨询服务（情感咨询、法律咨询、背调咨询等），而非可下载的虚拟商品教程或资料",
+    "alternatives": [
+      "咨询师教程",
+      "心理咨询课程",
+      "法律咨询资料",
+      "咨询行业学习资料"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "辅导": {
+    "status": "invalid",
+    "relevance_score": 0.15,
+    "reason": "搜索结果几乎全是线下家教、留学中介、口语陪练等服务类商品,缺少可下载的教程、资料、课程等虚拟商品内容",
+    "alternatives": [
+      "辅导教程",
+      "辅导资料网盘",
+      "辅导视频课程"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "陪练": {
+    "status": "invalid",
+    "relevance_score": 0.0,
+    "reason": "所有标题均为汽车驾驶陪练实体服务，与虚拟商品（教程、资料、网盘等数字内容）完全无关",
+    "alternatives": [
+      "陪练教程",
+      "陪练课程",
+      "游戏陪练话术",
+      "陪练技巧资料"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "素材": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题为设计素材、视频素材、模板等虚拟商品，符合数字内容交付意图，仅第3条小说合集和第4条影视资源网址偏离主题",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "插件": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为虚拟商品，涵盖Word插件、音频插件、PS插件、AE插件、网站主题插件等数字内容，完全符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "工具包": {
+    "status": "invalid",
+    "relevance_score": 0.0,
+    "reason": "所有标题均为实体工具包/工具箱商品，无任何虚拟商品、教程、资料或数字内容",
+    "alternatives": [
+      "工具包教程",
+      "工具包资料",
+      "软件工具包"
+    ],
+    "last_evaluated": "2026-04-17"
+  },
+  "源码": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题符合虚拟商品意图，涵盖Java项目源码、网站模板源码、小程序源码、游戏源码、IM源码等可交付的数字内容和教程，仅个别标题略显宽泛但整体相关度高",
+    "alternatives": [],
+    "last_evaluated": "2026-04-17"
+  },
+  "半导体封装资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "绝大多数标题都是半导体封装相关的电子资料、教程、文档合集，高度符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "汽车悬架技术": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题为汽车悬架相关的技术资料、教程合集和设计文档等虚拟商品，符合搜索意图；少数为实体书籍",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "质谱分析资料": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题明确提供质谱分析相关的电子资料、教程、课程或软件包，符合虚拟商品意图，仅少数混杂其他组学内容",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "真空技术资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均为真空技术相关的电子资料、PDF教程、网盘发货的虚拟商品，高度符合搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "微流控芯片资料": {
+    "status": "valid",
+    "relevance_score": 0.85,
+    "reason": "多数标题明确提供微流控芯片相关电子资料、教程、PDF文档等虚拟商品，符合搜索意图；少数为实体二手书或考研面试题略有偏离",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "新能源电机资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "所有标题均明确指向新能源电机相关的虚拟资料，包括技术文档、视频教程、原理图、3D模型等数字内容，高度符合虚拟商品意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  },
+  "PLC编程资料": {
+    "status": "valid",
+    "relevance_score": 0.95,
+    "reason": "几乎所有标题都明确指向PLC编程相关的虚拟教程、视频课程、学习资料和技术文档，高度符合搜索意图",
+    "alternatives": [],
+    "last_evaluated": "2026-04-20"
+  }
+}

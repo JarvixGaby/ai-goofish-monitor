@@ -1,0 +1,12 @@
+# AI 热点周边赛道 — 蹭 2026 年 AI 明星公司的搜索流量
+# 依据：上次 dossier "量化交易投资入门 deepseek 幻方量化" ¥4 打包多本书
+# 说明买家在闲鱼主动搜 DeepSeek 相关；热点词能短期爆搜索流量
+# 用法：python collect.py --keywords-file ai_trend.txt --no-detail
+
+DeepSeek使用教程
+Cursor使用教程
+Claude使用教程
+ComfyUI教程
+AI绘画教程
+AI副业教程
+大模型微调教程

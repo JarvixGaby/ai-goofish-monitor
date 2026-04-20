@@ -10,6 +10,9 @@
 """
 
 import json
+import statistics
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -49,6 +52,28 @@ def load_raw(date_str: str) -> dict[str, list[dict]]:
     return result
 
 
+def _pub_ts_to_datetime(ts: int) -> datetime | None:
+    """将 API 发布时间戳转为 datetime（通常为毫秒）。"""
+    if not ts or ts <= 0:
+        return None
+    sec = float(ts) / 1000.0 if ts > 1_000_000_000_000 else float(ts)
+    try:
+        return datetime.fromtimestamp(sec, tz=timezone.utc).astimezone()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def _price_distribution_str(prices: list[float]) -> str:
+    """虚拟商品价格区间分布文案。"""
+    if not prices:
+        return "（无有效价格）"
+    b0 = sum(1 for p in prices if 0 <= p < 10)
+    b1 = sum(1 for p in prices if 10 <= p < 50)
+    b2 = sum(1 for p in prices if p >= 50)
+    parts = [f"¥0-10: {b0}个", f"¥10-50: {b1}个", f"¥50+: {b2}个"]
+    return ", ".join(parts)
+
+
 def calculate_gap(
     keyword: str,
     supply_items: list[dict],
@@ -69,10 +94,14 @@ def calculate_gap(
                       若为 None，则回退到 item["is_virtual"] 字段（fetcher 已标注）
 
     返回包含以下字段的字典：
-        keyword, gap_score, demand_posts, virtual_supply, total_listings,
-        avg_price, avg_want, suggested_price, top_titles, top_items
+        keyword, gap_score, demand_posts, virtual_supply, weak_virtual_count, total_listings,
+        avg_price, avg_want, suggested_price, top_titles, top_items,
+        price_p25, price_median, price_p75, price_distribution,
+        newest_pub_date, oldest_pub_date, recent_7d_count, recent_30d_count,
+        classification_dist, top_want_items, want_positive_count
     """
     virtual: list[dict] = []
+    weak_virtual_count = 0
 
     for item in supply_items:
         # 优先使用已有分类结果（来自 AI 分类器或 fetcher）
@@ -80,16 +109,20 @@ def calculate_gap(
 
         if classification == "virtual":
             virtual.append(item)
-        elif classification in ("demand", "blacklisted", "physical"):
             continue
-        elif vocabulary is not None:
+        if classification == "weak_virtual":
+            weak_virtual_count += 1
+            continue
+        if classification in ("demand", "blacklisted", "physical"):
+            continue
+        if vocabulary is not None:
             # 使用词库匹配
             result = vocabulary.match(item.get("title", ""))
+            item["classification"] = result.classification
             if result.classification == "virtual":
-                item["classification"] = "virtual"
                 virtual.append(item)
-            else:
-                item["classification"] = result.classification or "unknown"
+            elif result.classification == "weak_virtual":
+                weak_virtual_count += 1
         else:
             # 最终回退：使用 fetcher 标注的 is_virtual 字段
             if item.get("is_virtual", False):
@@ -100,14 +133,73 @@ def calculate_gap(
 
     virtual_count = len(virtual)
     total = len(supply_items)
+    want_positive_count = sum(
+        1 for i in supply_items if int(i.get("want_num") or 0) > 0
+    )
 
     # 平均售价（只统计有效价格）
     prices = [i["price"] for i in virtual if i.get("price", 0) > 0]
     avg_price = round(sum(prices) / len(prices), 1) if prices else 0.0
 
+    if len(prices) >= 2:
+        q = statistics.quantiles(prices, n=4)
+        price_p25 = round(float(q[0]), 1)
+        price_median = round(float(q[1]), 1)
+        price_p75 = round(float(q[2]), 1)
+    elif len(prices) == 1:
+        price_p25 = price_median = price_p75 = round(float(prices[0]), 1)
+    else:
+        price_p25 = price_median = price_p75 = 0.0
+
+    price_distribution = _price_distribution_str(prices)
+
     # 平均想要数
     wants = [i["want_num"] for i in virtual if i.get("want_num", 0) > 0]
     avg_want = round(sum(wants) / len(wants), 1) if wants else 0.0
+
+    # 发布时间：基于全部挂牌（反映市场活跃度）
+    now = datetime.now().astimezone()
+    cutoff7 = now - timedelta(days=7)
+    cutoff30 = now - timedelta(days=30)
+    pub_dates: list[datetime] = []
+    recent_7d_count = 0
+    recent_30d_count = 0
+    for item in supply_items:
+        dt = _pub_ts_to_datetime(int(item.get("pub_ts") or 0))
+        if not dt:
+            continue
+        pub_dates.append(dt)
+        if dt >= cutoff7:
+            recent_7d_count += 1
+        if dt >= cutoff30:
+            recent_30d_count += 1
+
+    if pub_dates:
+        newest = max(pub_dates)
+        oldest = min(pub_dates)
+        newest_pub_date = newest.strftime("%Y-%m-%d")
+        oldest_pub_date = oldest.strftime("%Y-%m-%d")
+    else:
+        newest_pub_date = ""
+        oldest_pub_date = ""
+
+    # 分类分布（全量挂牌）
+    class_keys = [str(item.get("classification") or "unknown") for item in supply_items]
+    classification_dist = dict(Counter(class_keys))
+
+    # 按想要数排序的 Top 3 虚拟商品
+    virtual_by_want = sorted(
+        virtual,
+        key=lambda x: int(x.get("want_num") or 0),
+        reverse=True,
+    )
+    top_want_items = []
+    for it in virtual_by_want[:3]:
+        top_want_items.append({
+            "title": it.get("title", ""),
+            "price": it.get("price", 0),
+            "want_num": int(it.get("want_num") or 0),
+        })
 
     # 核心缺口分
     gap_score = round(demand_count / max(virtual_count, 1), 2)
@@ -129,10 +221,22 @@ def calculate_gap(
         "gap_score": gap_score,
         "demand_posts": demand_count,
         "virtual_supply": virtual_count,
+        "weak_virtual_count": weak_virtual_count,
         "total_listings": total,
         "avg_price": avg_price,
         "avg_want": avg_want,
         "suggested_price": suggested_price,
         "top_titles": top_titles,
         "top_items": top_items,     # 新增：供 Phase 2 AI Advisor 使用
+        "price_median": price_median,
+        "price_p25": price_p25,
+        "price_p75": price_p75,
+        "price_distribution": price_distribution,
+        "newest_pub_date": newest_pub_date,
+        "oldest_pub_date": oldest_pub_date,
+        "recent_7d_count": recent_7d_count,
+        "recent_30d_count": recent_30d_count,
+        "classification_dist": classification_dist,
+        "top_want_items": top_want_items,
+        "want_positive_count": want_positive_count,
     }

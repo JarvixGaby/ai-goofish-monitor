@@ -29,8 +29,11 @@ def vocab(vocab_dir: Path) -> Vocabulary:
 def seeded_vocab(vocab_dir: Path) -> Vocabulary:
     """预置了部分词条的 Vocabulary 实例。"""
     vocab_dir.mkdir(parents=True, exist_ok=True)
-    (vocab_dir / "virtual_supply.txt").write_text(
-        "# 注释行\n教程\n\n百度云\n秒发\n", encoding="utf-8"
+    (vocab_dir / "virtual_weak.txt").write_text(
+        "# 注释行\n教程\n\n", encoding="utf-8"
+    )
+    (vocab_dir / "virtual_strong.txt").write_text(
+        "百度云\n秒发\n", encoding="utf-8"
     )
     (vocab_dir / "demand_signal.txt").write_text(
         "求\n有没有\n蹲一个\n", encoding="utf-8"
@@ -50,27 +53,29 @@ def seeded_vocab(vocab_dir: Path) -> Vocabulary:
 
 class TestLoad:
     def test_load_nonexistent_returns_empty(self, vocab: Vocabulary):
-        result = vocab.load("virtual_supply")
+        result = vocab.load("virtual_strong")
         assert result == set()
 
+    def test_load_virtual_supply_union(self, seeded_vocab: Vocabulary):
+        u = seeded_vocab.load("virtual_supply")
+        assert "教程" in u and "百度云" in u and "秒发" in u
+
     def test_load_skips_comments_and_blank_lines(self, seeded_vocab: Vocabulary):
-        terms = seeded_vocab.load("virtual_supply")
+        terms = seeded_vocab.load("virtual_weak")
         assert "# 注释行" not in terms
         assert "" not in terms
         assert "教程" in terms
-        assert "百度云" in terms
 
     def test_load_cached(self, seeded_vocab: Vocabulary):
-        first = seeded_vocab.load("virtual_supply")
-        second = seeded_vocab.load("virtual_supply")
+        first = seeded_vocab.load("virtual_weak")
+        second = seeded_vocab.load("virtual_weak")
         assert first is second  # 同一对象，来自缓存
 
     def test_reload_clears_cache(self, seeded_vocab: Vocabulary, vocab_dir: Path):
-        seeded_vocab.load("virtual_supply")
-        # 修改文件
-        (vocab_dir / "virtual_supply.txt").write_text("新词\n", encoding="utf-8")
+        seeded_vocab.load("virtual_weak")
+        (vocab_dir / "virtual_weak.txt").write_text("新词\n", encoding="utf-8")
         seeded_vocab.reload()
-        terms = seeded_vocab.load("virtual_supply")
+        terms = seeded_vocab.load("virtual_weak")
         assert "新词" in terms
         assert "教程" not in terms
 
@@ -85,16 +90,16 @@ class TestMatch:
         assert result.classification == "unknown"
         assert result.confidence == 0.0
 
-    def test_virtual_supply_match(self, seeded_vocab: Vocabulary):
+    def test_strong_signal_virtual(self, seeded_vocab: Vocabulary):
         result = seeded_vocab.match("Cursor教程 百度云 秒发")
         assert result.classification == "virtual"
         assert result.confidence == 1.0
-        assert "教程" in result.matched_terms
+        assert "百度云" in result.matched_terms
 
-    def test_demand_signal_match(self, seeded_vocab: Vocabulary):
+    def test_demand_signal_before_virtual(self, seeded_vocab: Vocabulary):
         result = seeded_vocab.match("蹲一个AI工作流教程")
-        # 优先匹配 virtual（"教程" 命中），需求词优先级低于 virtual
-        assert result.classification == "virtual"
+        assert result.classification == "demand"
+        assert "蹲一个" in result.matched_terms
 
     def test_pure_demand_match(self, seeded_vocab: Vocabulary):
         result = seeded_vocab.match("有没有好用的AI工具推荐")
@@ -102,7 +107,7 @@ class TestMatch:
         assert "有没有" in result.matched_terms
 
     def test_blacklist_takes_priority(self, seeded_vocab: Vocabulary):
-        """黑名单优先于 virtual_supply。"""
+        """黑名单优先于虚拟信号。"""
         result = seeded_vocab.match("实体书教程推荐")
         assert result.classification == "blacklisted"
         assert "实体书" in result.matched_terms
@@ -113,10 +118,30 @@ class TestMatch:
         assert result.matched_terms == []
 
     def test_delivery_method_match(self, seeded_vocab: Vocabulary):
-        """delivery_method 单独命中（无 virtual_supply 词）。"""
+        """delivery_method 单独命中（无强/弱虚拟词）。"""
         result = seeded_vocab.match("发送提取码给你")
         assert result.classification == "delivery"
         assert result.confidence == 0.7
+
+    def test_weak_only_weak_virtual(self, seeded_vocab: Vocabulary):
+        result = seeded_vocab.match("可转债入门教程")
+        assert result.classification == "weak_virtual"
+        assert result.confidence == 0.4
+        assert result.matched_terms == ["教程"]
+
+    def test_two_weak_virtual(self, seeded_vocab: Vocabulary):
+        (seeded_vocab.vocab_dir / "virtual_weak.txt").write_text(
+            "教程\n资料\n", encoding="utf-8"
+        )
+        seeded_vocab.reload()
+        result = seeded_vocab.match("教程资料合集")
+        assert result.classification == "virtual"
+        assert abs(result.confidence - 0.8) < 0.01
+
+    def test_one_weak_plus_delivery(self, seeded_vocab: Vocabulary):
+        result = seeded_vocab.match("可转债教程 提取码发货")
+        assert result.classification == "virtual"
+        assert abs(result.confidence - 0.7) < 0.01
 
 
 # ─────────────────────────────────────────────
@@ -132,7 +157,6 @@ class TestAddTerms:
         ]
         added = vocab.add_terms("virtual_supply", entries)
         assert added == 2
-        # 写入文件后重新加载
         vocab.reload()
         terms = vocab.load("virtual_supply")
         assert "新词A" in terms
@@ -153,7 +177,7 @@ class TestAddTerms:
 
     def test_add_creates_file_if_missing(self, vocab: Vocabulary, vocab_dir: Path):
         vocab_dir.mkdir(parents=True, exist_ok=True)
-        path = vocab_dir / "virtual_supply.txt"
+        path = vocab_dir / "virtual_weak.txt"
         assert not path.exists()
         vocab.add_terms("virtual_supply", [TermEntry("新词", 0.9, "ai")])
         assert path.exists()
@@ -212,9 +236,12 @@ class TestPending:
 class TestStats:
     def test_stats_returns_counts(self, seeded_vocab: Vocabulary):
         stats = seeded_vocab.stats()
-        assert stats["virtual_supply"] == 3   # 教程, 百度云, 秒发
-        assert stats["demand_signal"] == 3    # 求, 有没有, 蹲一个
+        assert stats["virtual_weak"] == 1
+        assert stats["virtual_strong"] == 2
+        assert stats["demand_signal"] == 3
         assert stats["blacklist"] == 1
+        assert "virtual_supply" not in stats
+        assert len(stats) == len(CATEGORY_FILES)
 
     def test_stats_empty_vocab(self, vocab: Vocabulary):
         stats = vocab.stats()

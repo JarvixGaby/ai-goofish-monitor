@@ -1,0 +1,46 @@
+# 弱信号词库（虚拟商品 — 需组合或交付辅助词）
+# 单独 1 个 → weak_virtual（confidence=0.4）；2+ 个 → virtual（0.8）；
+# 1 个弱信号 + ≥1 个 delivery_method → virtual（0.7）
+# 格式：每行一个词，# 开头为注释，空行忽略
+# AI 学习到的词会自动追加到本文件末尾
+
+# === 泛化内容词（实物书标题也常出现）===
+教程
+文档
+资料
+课程
+指导
+方法论
+指南
+攻略
+服务
+模板
+合集
+PDF
+word文档
+笔记
+总结
+整理
+全套
+全程
+系列
+专栏
+课件
+讲义
+精选
+整合
+
+# === 书名/题型常见字（弱信号）===
+题
+书
+
+# --- AI learned 2026-04-17 ---
+美化  # source=ai, confidence=0.85, 常用于PPT、图片等虚拟服务场景
+代码  # source=ai, confidence=0.88, 编程相关虚拟服务的明确信号
+原图  # source=ai, confidence=0.86, 数字图片资源的常见表达
+汉化  # source=ai, confidence=0.87, 软件汉化版本，虚拟商品特征
+
+# --- AI learned 2026-04-17 ---
+智能体  # source=ai, confidence=0.88, AI配置方案，虚拟服务
+思维导图  # source=ai, confidence=0.85, 学习资料，通常为图片或文件
+全开源  # source=ai, confidence=0.87, 源码类商品特征

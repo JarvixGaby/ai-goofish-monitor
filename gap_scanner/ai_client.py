@@ -99,7 +99,16 @@ class AIClient:
                 last_error = e
                 logger.warning(f"[ai_client] API 错误（第 {attempt + 1} 次）：{e}")
                 if attempt < self._settings.ai_max_retries:
-                    await asyncio.sleep(2 ** attempt)
+                    # 429 并发/限流错误需要更长等待；其它错误用常规指数退避
+                    err_str = str(e)
+                    if "429" in err_str or "rate_limit" in err_str.lower():
+                        # 带抖动的长退避：10s / 30s / 60s
+                        import random
+                        wait = (10, 30, 60)[min(attempt, 2)] + random.uniform(0, 5)
+                        logger.warning(f"[ai_client] 限流，等待 {wait:.1f}s 后重试")
+                        await asyncio.sleep(wait)
+                    else:
+                        await asyncio.sleep(2 ** attempt)
 
             except json.JSONDecodeError as e:
                 # JSON 解析失败：不重试，直接抛出
@@ -173,11 +182,20 @@ class AIClient:
 
 def build_client_optional(settings: Settings | None) -> AIClient | None:
     """
-    尝试构建 AIClient；若 settings 为 None 或缺少必要配置，返回 None。
-    用于 scan.py 中的优雅降级：无 AI 配置时跳过 AI 步骤。
+    尝试构建 AIClient（轻量模型）；若 settings 为 None 或缺少必要配置，返回 None。
     """
     if settings is None:
         return None
     if not settings.ai_base_url or not settings.ai_api_key:
         return None
     return AIClient(settings)
+
+
+def build_analysis_client(settings: Settings) -> AIClient:
+    """
+    构建使用 ai_analysis_model（如 sonnet）的 AIClient，用于深度分析任务。
+    与轻量客户端共享 base_url/api_key，只是模型不同。
+    """
+    from dataclasses import replace
+    analysis_settings = replace(settings, ai_model=settings.ai_analysis_model)
+    return AIClient(analysis_settings)

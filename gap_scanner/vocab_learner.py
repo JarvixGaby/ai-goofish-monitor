@@ -64,7 +64,7 @@ _SYSTEM_PROMPT = """\
   "new_terms": [
     {{
       "term": "词条",
-      "category": "virtual_supply",
+      "category": "virtual_weak",
       "confidence": 0.9,
       "reason": "简短说明（中文，不超过30字）"
     }}
@@ -77,7 +77,7 @@ _SYSTEM_PROMPT = """\
   ]
 }}
 
-category 只能是：virtual_supply | demand_signal | delivery_method
+category 只能是：virtual_strong | virtual_weak | virtual_supply（兼容，等同 virtual_weak）| demand_signal | delivery_method
 """
 
 
@@ -160,7 +160,7 @@ def _process_signal_terms(
     """
     existing = set()
     for category in ("virtual_supply", "demand_signal", "delivery_method"):
-        existing.update(vocabulary.load(category))
+        existing.update(vocabulary.load(category))  # virtual_supply = strong ∪ weak
 
     entries_by_category: dict[str, list[TermEntry]] = {}
     for term, category in terms:
@@ -247,7 +247,7 @@ def _process_ai_response(
     # 收集现有词（去重用）
     existing = set()
     for category in ("virtual_supply", "demand_signal", "delivery_method"):
-        existing.update(vocabulary.load(category))
+        existing.update(vocabulary.load(category))  # virtual_supply = strong ∪ weak
     existing.update(e.term for e in result.auto_added)
     existing.update(e.term for e in result.pending_review)
 
@@ -263,7 +263,13 @@ def _process_ai_response(
 
         if not term or len(term) < 2 or term in existing:
             continue
-        if category not in ("virtual_supply", "demand_signal", "delivery_method"):
+        if category not in (
+            "virtual_strong",
+            "virtual_weak",
+            "virtual_supply",
+            "demand_signal",
+            "delivery_method",
+        ):
             category = "virtual_supply"
 
         entry = TermEntry(term=term, confidence=confidence, source="ai",
